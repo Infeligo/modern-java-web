@@ -1,0 +1,122 @@
+<project xmlns:ivy="antlib:org.apache.ivy.ant" name="modern-java-web" default="fetch-jars">
+
+  <property name="ivy.version" value="2.2.0"/>
+  <property name="ivy.checksums" value=""/> <!-- disables sha1 checks in maven - this fails for google stuff -->
+  <property name="ivy.settings.file" value="ivy-settings.xml"/>
+  <property name="artifact.jar" value="${ant.project.name}.jar"/>
+  <property name="artifact.war" value="${ant.project.name}.war"/>
+
+  <target name="fetch-jars" depends="install-ivy" unless="ivy.deps.changed">
+    <delete failonerror="false">
+      <fileset dir="lib/default"/>
+      <fileset dir="lib/test"/>
+      <fileset dir="lib/devel"/>
+      <fileset dir="lib/sources"/>
+    </delete>
+    <ivy:retrieve pattern="lib/[conf]/[artifact]-[type]-[revision].[ext]" symlink="true"/>
+  </target>
+
+  <target name="clean-jars" description="Removes all libraries">
+    <delete dir="lib" includes="**/*.jar" excludes="non-ivy/*" includeemptydirs="true"/>
+  </target>
+
+  <target name="ivy-clean-cache" description="Cleans Ivy cache">
+    <ivy:cleancache/>
+  </target>
+
+  <target name="install-ivy">
+    <mkdir dir="lib"/>
+    <get src="http://repo1.maven.org/maven2/org/apache/ivy/ivy/${ivy.version}/ivy-${ivy.version}.jar" dest="lib/ivy.jar" usetimestamp="true"/>
+    <path id="ivy.lib.path">
+      <fileset dir="lib" includes="*.jar"/>
+    </path>
+    <taskdef resource="org/apache/ivy/ant/antlib.xml" uri="antlib:org.apache.ivy.ant" classpathref="ivy.lib.path"/>
+  </target>
+
+  <target name="war" depends="package">
+    <delete dir="dist/webapp"/>
+    <mkdir dir="dist/webapp"/>
+    <copy todir="dist/webapp">
+      <fileset dir="webapp"/>
+    </copy>
+    <copy todir="dist/webapp/WEB-INF/classes">
+      <fileset dir="config"/>
+    </copy>
+    <mkdir dir="dist/webapp/WEB-INF/lib"/>
+    <copy todir="dist/webapp/WEB-INF/lib">
+      <fileset dir="lib/default"/>
+      <fileset dir="lib/non-ivy"/>
+    </copy>
+    <copy file="dist/${artifact.jar}" todir="dist/webapp/WEB-INF/lib"/>
+    <copy file="classes-src/Migrator.class" todir="dist/webapp"/>
+    <war basedir="dist/webapp" destfile="dist/${artifact.war}" manifest="dist/MANIFEST.MF"/>
+    <delete dir="dist/webapp"/>
+  </target>
+
+  <target name="package" depends="test">
+    <mkdir dir="dist"/>
+    <manifest id="manifest" file="dist/MANIFEST.MF">
+      <attribute name="Main-Class" value="Migrator"/>
+      <attribute name="Implementation-Title" value="ModernJavaWebApp"/>
+      <attribute name="Implementation-Vendor" value="Example"/>
+      <!--<attribute name="Build" value="${version}"/>-->
+    </manifest>
+    <jar file="dist/${artifact.jar}" manifest="dist/MANIFEST.MF">
+      <fileset dir="classes-src"/>
+      <fileset dir="sql"/>
+    </jar>
+  </target>
+
+  <target name="test" depends="compile,compile-tests">
+    <mkdir dir="test-results"/>
+    <junit maxmemory="512m" haltonfailure="false" failureproperty="tests-failed" fork="true" forkmode="once">
+      <batchtest todir="test-results">
+        <fileset dir="classes-test" includes="**/*Test.class" excludes="**/Abstract*"/>
+        <formatter type="xml"/>
+      </batchtest>
+      <classpath>
+        <path path="classes-src"/>
+        <path path="classes-test"/>
+        <fileset dir="lib" includes="**/*.jar" excludes="sources/*.jar"/>
+      </classpath>
+    </junit>
+    <fail if="tests-failed"/>
+  </target>
+
+  <target name="compile" depends="clean,fetch-jars">
+    <mkdir dir="classes-src"/>
+    <javac srcdir="src" destdir="classes-src" encoding="UTF-8" target="1.5" debug="true">
+      <classpath>
+        <fileset dir="lib" includes="**/*.jar" excludes="sources/*.jar"/>
+      </classpath>
+      <src path="src"/>
+    </javac>
+    <copy todir="classes-src">
+      <fileset dir="src" includes="**/*" excludes="**/*.java"/>
+    </copy>
+  </target>
+
+  <target name="compile-tests">
+    <mkdir dir="classes-test"/>
+    <javac srcdir="test" destdir="classes-test" encoding="UTF-8" target="1.5" debug="true">
+      <classpath>
+        <path path="classes-src"/>
+        <fileset dir="lib" includes="**/*.jar" excludes="sources/*.jar"/>
+      </classpath>
+    </javac>
+    <copy todir="classes-test">
+      <fileset dir="test" includes="**/*" excludes="**/*.java"/>
+    </copy>
+  </target>
+
+  <target name="clean">
+    <delete dir="classes-src"/>
+    <delete dir="classes-test"/>
+    <delete dir="test-results"/>
+  </target>
+
+  <target name="clean-dist" description="can be run on hudson when artifacts renamed">
+    <delete dir="dist"/>
+  </target>
+
+</project>
